@@ -1,0 +1,186 @@
+
+import com.esotericsoftware.minlog.Log;
+import org.apache.flink.api.common.functions.RichMapFunction;
+import org.apache.flink.api.common.state.ValueState;
+import org.apache.flink.api.common.state.ValueStateDescriptor;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.source.ParallelSourceFunction;
+import org.apache.flink.streaming.api.functions.source.SourceFunction;
+import java.io.Serializable;
+import java.util.Random;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * Contains the Data Model and the Flink pipeline building logic.
+ * The core logic is isolated here.
+ */
+
+public class TransactionProcessor {
+
+    // --- Data Model (Serializable for Flink) ---
+    public static class Transaction implements Serializable {
+        private static final Logger LOG = LoggerFactory.getLogger(TransactionProcessor.class);
+
+        public long transactionId;
+        public String accountId;
+        public double amount;
+        public long timestamp;
+        public String processingStatus;
+        public double accountBalance;
+        public double newBalance;
+
+        public Transaction() {}
+
+        public Transaction(long transactionId, String accountId, double amount, long timestamp, double accountBalance, double newBalance) {
+            this.transactionId = transactionId;
+            this.accountId = accountId;
+            this.amount = amount;
+            this.timestamp = timestamp;
+            this.accountBalance = accountBalance;
+            this.newBalance = newBalance;
+        }
+
+        @Override
+        public String toString() {
+            return String.format(
+                    "Transaction{id=%d, account='%s', amount=%.2f, time=%d, Current_Balance='%.2f', New_Balance='%.2f', status='%s'}",
+                    transactionId, accountId, amount, timestamp, accountBalance, newBalance, processingStatus
+            );
+        }
+    }
+
+    // --- Flink Pipeline Builder ---
+
+
+    // --- NEW: Custom Continuous Transaction Source ---
+
+    public static class ContinuousTransactionSource implements ParallelSourceFunction<Transaction> {
+
+        private volatile boolean isRunning = true;
+        private long transactionCounter = 500000;
+        private final Random random = new Random();
+        //private final String[] accountIds = {"ACCT-" + new Random(5), "ACCT-" + new Random(5), "ACCT-" + new Random(5), "ACCT-"+ new Random(5)};
+
+        @Override
+        public void run(SourceFunction.SourceContext<Transaction> ctx) throws Exception {
+            while (isRunning) {
+                // 1. Generate new transaction data
+                long txId = transactionCounter++;
+                //String accountId = accountIds[random.nextInt(accountIds.length)];
+
+                // Generates a number between 10000 and 99999
+                int randomAccountNum = 10000 + random.nextInt(2000);
+                String accountId = "ACCT-" + randomAccountNum;
+
+                // Generate a random amount between 1.00 and 1000.00
+                double baseAmount = 1.0 + (1000.0 - 1.0) * random.nextDouble();
+
+               // double currentStartBalance = 1.0 + (4000.0 - 1.0) * random.nextDouble();
+
+                // 2. Introduce a chance for the amount to be negative (e.g., 20% chance)
+                double amount;
+                if (random.nextDouble() < 0.20) {
+                    // 20% chance: make it negative (withdrawal/refund)
+                    amount = -baseAmount;
+                } else {
+                    // 80% chance: keep it positive (deposit/credit)
+                    amount = baseAmount;
+                }
+
+                // Introduce a chance for the current balance to be negative (e.g., 10% chance)
+               // if (random.nextDouble() < 0.10) {
+               //     currentStartBalance = -currentStartBalance;
+               // }
+
+                long timestamp = System.currentTimeMillis();
+
+                Transaction newTransaction = new Transaction(txId, accountId, amount, timestamp, 0.00, 0.00);
+
+                // 2. Emit the transaction with a synchronized lock
+                // This lock is important for correct checkpointing
+                synchronized (ctx.getCheckpointLock()) {
+                    ctx.collect(newTransaction);
+                }
+
+                // 3. Wait for 1 second before generating the next transaction
+                //TimeUnit.SECONDS.sleep(1);
+                //TimeUnit.MILLISECONDS.sleep(1); // 1000 trx per sec
+            }
+        }
+
+        @Override
+        public void cancel() {
+            isRunning = false;
+        }
+    }
+
+    public static void execute(StreamExecutionEnvironment env, String jobName) throws Exception {
+
+        // 1. Read data from the new Continuous Source
+        // This is now an UNBOUNDED source, meaning the job will never finish.
+        DataStream<Transaction> transactionStream = env.addSource(new ContinuousTransactionSource())
+                .name("Continuous Transaction Source");
+
+        // 2. Add the new columns (processingStatus, currentBalance, and NewBalance) using a MapFunction
+        DataStream<Transaction> processedStream = transactionStream
+                .keyBy(transaction -> transaction.accountId) // Group by account
+                .map(new RichMapFunction<Transaction, Transaction>() {
+
+                    // The state handle: Flink manages this for us
+                    private transient ValueState<Double> runningBalance;
+
+                    @Override
+                    public void open(Configuration parameters) {
+                        // Initialize the state descriptor
+                        ValueStateDescriptor<Double> descriptor =
+                                new ValueStateDescriptor<>("accountBalance", Double.class, 0.0);
+                        runningBalance = getRuntimeContext().getState(descriptor);
+                    }
+
+                    @Override
+                    public Transaction map(Transaction transaction) throws Exception {
+                        // 1. Get the current balance from state
+                        Double currentBalance = runningBalance.value();
+                        if (currentBalance == null) { currentBalance = 0.0; }
+
+                        // 2. Update the balance with the new transaction amount
+                        double newBalance = currentBalance + transaction.amount;
+                        runningBalance.update(newBalance);
+
+                        // 3. Add logic using that state (Example: Flag if account goes negative)
+                        if (newBalance < 0) {
+                            transaction.processingStatus = "OVERDRAFT_WARNING";
+                        } else if (transaction.amount > 700.00 && newBalance > 0) {
+                            transaction.processingStatus = "HighAmountTransaction";
+                        } else {
+                            transaction.processingStatus = "Standard";
+                        }
+
+                        transaction.newBalance = newBalance;
+                        transaction.accountBalance = currentBalance;
+
+                        // Optional: Print balance to console for debugging
+                        // System.out.println("Account: " + transaction.accountId + " | New Balance: " + newBalance);
+
+                        return transaction;
+                    }
+                })
+                .returns(Transaction.class)
+                .name("Stateful Balance Tracker");
+
+        // 3. Output to the log
+        processedStream.print("Bank Transaction");
+
+        // 4. Execute the Flink job
+        Log.info("Starting Flink Job Execution...");
+        env.execute(jobName);
+        Log.info("Flink Job Started and Running Continuously...");
+    }
+
+}
+
+
