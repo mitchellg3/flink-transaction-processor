@@ -22,4 +22,5 @@ The pipeline follows this structure:
 ## 📅 Roadmap / To-Do
 1. Configurable total transaction count 
 2. Clean up and add better comments
+3. Remove warnings and deprecated code
 
