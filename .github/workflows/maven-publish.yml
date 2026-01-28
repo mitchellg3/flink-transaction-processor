@@ -1,14 +1,11 @@
-name: Maven Package & Release
+name: Maven Package & Auto-Release
 
 on:
   push:
     branches: [ "master" ]
-    tags: [ "*" ]
-  pull_request:
-    branches: [ "master" ]
 
 jobs:
-  build-and-publish:
+  build-and-release:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -16,6 +13,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Pulls all history for proper tagging
 
       - name: Set up JDK 11
         uses: actions/setup-java@v4
@@ -25,19 +24,21 @@ jobs:
           server-id: github
           settings-path: ${{ github.workspace }}
 
-      - name: Build and Deploy to GitHub Packages
-        # This runs on every push to master to keep the Maven repo updated
-        run: mvn -B deploy -s $GITHUB_WORKSPACE/settings.xml -Drevision=1.0.${{ github.run_number }} -DskipTests
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build with Maven
+        # Uses the unique run number to version the build
+        run: mvn -B package -Drevision=1.0.${{ github.run_number }} --file pom.xml -DskipTests
 
-      - name: Create GitHub Release
-        # This step ONLY runs if you pushed a tag (e.g., git push origin v1.0.5, or release)
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: target/flink-transaction-processor-job-latest.jar
-          name: Release ${{ github.ref_name }}
-          generate_release_notes: true
+      - name: Create or Update Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Generate a unique tag based on the build number
+          AUTO_TAG="v1.0.${{ github.run_number }}"
+          
+          echo "Creating automated release for tag: $AUTO_TAG"
+          
+          gh release create "$AUTO_TAG" \
+            --title "Release $AUTO_TAG" \
+            --notes "Automated release from master branch push." \
+            --target master \
+            target/flink-transaction-processor-job-latest.jar
