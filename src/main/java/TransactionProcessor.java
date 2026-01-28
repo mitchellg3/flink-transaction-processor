@@ -57,33 +57,44 @@ public class TransactionProcessor {
 
     public static class ContinuousTransactionSource implements ParallelSourceFunction<Transaction> {
 
+
+        //This is the system exit. If you click "Cancel" or "Stop" in the UI, or if the Flink cluster needs to shut down for maintenance,
+        // Flink calls the cancel() method. If you don't have isRunning in your loop, the source might keep trying to generate data for a few seconds during the shutdown process,
+        // which can lead to messy logs or interrupted checkpoints.
         private volatile boolean isRunning = true;
-        private long transactionCounter = 500000;
+
+        private long startTransactionIdAt = 200045; // Just looks more real
         private final Random random = new Random();
-        //private final String[] accountIds = {"ACCT-" + new Random(5), "ACCT-" + new Random(5), "ACCT-" + new Random(5), "ACCT-"+ new Random(5)};
+        private final int maxAccounts;
+
+
+        public ContinuousTransactionSource(int maxAccounts) {
+            this.maxAccounts = maxAccounts;
+        }
 
         @Override
         public void run(SourceFunction.SourceContext<Transaction> ctx) throws Exception {
             while (isRunning) {
 
                 // Generate new transaction data
-                long txId = transactionCounter++;
+                long txId = startTransactionIdAt++;
 
-                // Generates a random number
-                int randomAccountNum = 10000 + random.nextInt(2000);
+                // ensures that every randomAccountNum generated will be a unique-looking 5-digit ID starting with the number 1 (from 10,000 to 13,999)
+                // basically 4000 different account possibilities
+                int randomAccountNum = 10000 + random.nextInt(maxAccounts);
                 String accountId = "ACCT-" + randomAccountNum;
 
-                // Generate a random amount between 1.00 and 1000.00 for base amount
-                double baseAmount = 1.0 + (1000.0 - 1.0) * random.nextDouble();
+                // Generate a random amount for a transaction between 1.00 and 1000.00 for base amount
+                double baseTransactionAmount = 1.0 + (1000.0 - 1.0) * random.nextDouble();
 
                 // Introduce a chance for the amount to be negative (e.g., 20% chance)
                 double amount;
                 if (random.nextDouble() < 0.20) {
                     // 20% chance: make it negative (withdrawal/refund)
-                    amount = -baseAmount;
+                    amount = -baseTransactionAmount;
                 } else {
                     // 80% chance: keep it positive (deposit/credit)
-                    amount = baseAmount;
+                    amount = baseTransactionAmount;
                 }
 
                 long timestamp = System.currentTimeMillis();
@@ -110,11 +121,11 @@ public class TransactionProcessor {
         }
     }
 
-    public static void execute(StreamExecutionEnvironment env, String jobName) throws Exception {
+    public static void execute(StreamExecutionEnvironment env, String jobName, int maxAccounts) throws Exception {
 
         // Read data from the new Continuous Source
         // This is now an UNBOUNDED source, meaning the job will never finish.
-        DataStream<Transaction> transactionStream = env.addSource(new ContinuousTransactionSource())
+        DataStream<Transaction> transactionStream = env.addSource(new ContinuousTransactionSource(maxAccounts))
                 .name("Continuous Transaction Source");
 
         // Add the new columns (processingStatus, currentBalance, and NewBalance) using a RichMapFunction
