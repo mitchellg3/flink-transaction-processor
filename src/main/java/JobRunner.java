@@ -29,11 +29,13 @@ public class JobRunner {
         // Get the limit (default to 4000 if not provided)
         int maxAccounts = params.getInt("max.accounts", 4000);
 
+        boolean bloatState = params.getBoolean("state.bloat", false); // Default to false if not passed
+
         // Make parameters available globally in your operators (optional)
         env.getConfig().setGlobalJobParameters(params);
-        Log.info("Using Parameters: max.accounts = " + maxAccounts + " & checkpoint.interval = " +  checkpointInterval);
+        Log.info("Using Parameters: max.accounts = " + maxAccounts + " & checkpoint.interval = " +  checkpointInterval + " & state.bloat = " + bloatState);
 
         // Call the dedicated pipeline builder
-        TransactionProcessor.execute(env, JOB_NAME, maxAccounts);
+        TransactionProcessor.execute(env, JOB_NAME, maxAccounts, bloatState);
     }
 }

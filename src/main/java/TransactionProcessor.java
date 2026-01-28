@@ -12,7 +12,6 @@ import java.io.Serializable;
 import java.util.Random;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Contains the Data Model and the Flink pipeline building logic.
@@ -32,23 +31,29 @@ public class TransactionProcessor {
         public String processingStatus;
         public double accountBalance;
         public double newBalance;
+        public String padding; // To hold junk data to bloat state
 
         public Transaction() {}
 
-        public Transaction(long transactionId, String accountId, double amount, long timestamp, double accountBalance, double newBalance) {
+        public Transaction(long transactionId, String accountId, double amount, long timestamp, double accountBalance, double newBalance, boolean bloatState) {
             this.transactionId = transactionId;
             this.accountId = accountId;
             this.amount = amount;
             this.timestamp = timestamp;
             this.accountBalance = accountBalance;
             this.newBalance = newBalance;
+
+            if (bloatState) {
+                // Generates ~2KB of data (2048 characters)
+                this.padding = new String(new char[2048]).replace('\0', 'X');
+            }
         }
 
         @Override
         public String toString() {
             return String.format(
-                    "Transaction{id=%d, account='%s', amount=%.2f, time=%d, Current_Balance='%.2f', New_Balance='%.2f', status='%s'}",
-                    transactionId, accountId, amount, timestamp, accountBalance, newBalance, processingStatus
+                    "Transaction{id=%d, account='%s', amount=%.2f, time=%d, Current_Balance='%.2f', New_Balance='%.2f', status='%s', padding='%s'}",
+                    transactionId, accountId, amount, timestamp, accountBalance, newBalance, processingStatus, padding
             );
         }
     }
@@ -66,10 +71,12 @@ public class TransactionProcessor {
         private long startTransactionIdAt = 200045; // Just looks more real
         private final Random random = new Random();
         private final int maxAccounts;
+        private final boolean bloatState;
 
 
-        public ContinuousTransactionSource(int maxAccounts) {
+        public ContinuousTransactionSource(int maxAccounts, boolean bloatState) {
             this.maxAccounts = maxAccounts;
+            this.bloatState = bloatState;
         }
 
         @Override
@@ -99,7 +106,7 @@ public class TransactionProcessor {
 
                 long timestamp = System.currentTimeMillis();
 
-                Transaction newTransaction = new Transaction(txId, accountId, amount, timestamp, 0.00, 0.00);
+                Transaction newTransaction = new Transaction(txId, accountId, amount, timestamp, 0.00, 0.00, bloatState);
 
                 // Emit the transaction with a synchronized lock
                 // This lock is important for correct checkpointing
@@ -121,11 +128,11 @@ public class TransactionProcessor {
         }
     }
 
-    public static void execute(StreamExecutionEnvironment env, String jobName, int maxAccounts) throws Exception {
+    public static void execute(StreamExecutionEnvironment env, String jobName, int maxAccounts, boolean bloatState) throws Exception {
 
         // Read data from the new Continuous Source
         // This is now an UNBOUNDED source, meaning the job will never finish.
-        DataStream<Transaction> transactionStream = env.addSource(new ContinuousTransactionSource(maxAccounts))
+        DataStream<Transaction> transactionStream = env.addSource(new ContinuousTransactionSource(maxAccounts, bloatState))
                 .name("Continuous Transaction Source");
 
         // Add the new columns (processingStatus, currentBalance, and NewBalance) using a RichMapFunction
