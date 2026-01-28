@@ -5,19 +5,34 @@ tracks account balances, and flags overdrafts. This is meant to be self-containe
 sources and sinks). 
 
 ## 🚀 Features
-* **Stateful Balance Tracking:** Uses `ValueState` to maintain real-time account balances.
+* **Stateful Balance Tracking:** Uses Flink's `ValueState` Utilizes Flink's ValueState to maintain a distributed "source of truth" for account balances, ensuring sub-millisecond lookups.
 * **Overdraft Detection:** Automatically flags transactions that result in a negative balance.
 * **High-Value Alerts:** Identifies transactions above a configurable threshold.
 * **Checkpointing:** Fault-tolerant state that survives job restarts.
-
+* **Exactly-Once Guarantees:** Configured with Checkpointing to ensure that even if the cluster crashes, account balances remain accurate and no data is double-counted. Currently every 1 min, but if this was real you should checkpoint more often.
+* **Self-Contained Testing:** Includes a built-in SourceFunction that generates mock banking traffic, making it 100% runnable out of the box.
+* 
 ## 🛠️ Setup & Running
 1. **Prerequisites:** Java 11+, Maven, and an IDE (IntelliJ recommended).
-2. **Build:** Run `mvn clean install` in the terminal.
-3. **Execute:** Run the `JobRUnner` class from your IDE.
 
-## 📊 Logic Flow
+2. **Clone the repo:** `git clone https://github.com/mitchellg3/flink-transaction-processor.git
+   cd flink-transaction-processor`
+
+3. **Build:** Run `mvn clean install` in the terminal.
+
+4. **Execute:** Run the `JobRunner` class from your IDE.
+
+## 🏗️ Architecture & Logic Flow
 The pipeline follows this structure:
 `Source -> KeyBy(AccountId) -> Map(Stateful Logic) -> Sink(Print)`
+
+**Ingestion:** Mock transactions (Account ID, Amount, Timestamp) are generated.
+
+**Partitioning (keyBy):** Data is routed by AccountId. All transactions for a specific user are guaranteed to be processed by the same parallel worker.
+
+**Stateful Processing:** A RichMapFunction retrieves the current balance from Flink’s managed memory, applies the transaction, checks for overdrafts, and updates the state.
+
+**Egress:** Results are streamed to the console (standard out) for real-time monitoring.
 
 ## 📅 Roadmap / To-Do
 1. Configurable total transaction count 
