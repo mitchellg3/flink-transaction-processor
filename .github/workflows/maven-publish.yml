@@ -30,9 +30,9 @@ jobs:
         settings-path: ${{ github.workspace }} # location for the settings.xml file
 
     - name: Build with Maven
-      run: mvn -B package --file pom.xml
+      run: mvn -B package -Drevision=1.0.${{ github.run_number }} --file pom.xml
 
     - name: Publish to GitHub Packages Apache Maven
-      run: mvn deploy -s $GITHUB_WORKSPACE/settings.xml
+      run: mvn deploy -s $GITHUB_WORKSPACE/settings.xml -Drevision=1.0.${{ github.run_number }}
       env:
         GITHUB_TOKEN: ${{ github.token }}
