@@ -11,6 +11,7 @@ sources and sinks). **This is built on Flink 1.20**
 * **Checkpointing:** Fault-tolerant state that survives job restarts.
 * **Exactly-Once Guarantees:** Configured with Checkpointing to ensure that even if the cluster crashes, account balances remain accurate and no data is double-counted. Currently every 1 min, but if this was real you should checkpoint more often.
 * **Self-Contained Testing:** Includes a built-in SourceFunction that generates mock banking traffic, making it 100% runnable out of the box.
+* **Real-time Filtering**: The pipeline automatically bifurcates the data stream using a side-logic filter. It classifies transactions into `Standard`, `HighAmountTransaction`, or `OVERDRAFT_WARNING`.
 
 ## 📦 Quick Start: Run the JAR
 
