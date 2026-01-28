@@ -13,11 +13,8 @@ public class JobRunner {
     public static void main(String[] args) throws Exception {
 
         // 1. Set up the execution environment
-        // Flink automatically decides between LocalStreamEnvironment (IDE)
-        // or RemoteStreamEnvironment (Cluster) based on how it's executed.
         final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-
-        env.enableCheckpointing(60000);
+        env.enableCheckpointing(60000); // checkpoint every min
         env.getCheckpointConfig().setCheckpointingMode(CheckpointingMode.EXACTLY_ONCE);
 
         // 2. Call the dedicated pipeline builder

@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit;
 
 public class TransactionProcessor {
 
-    // --- Data Model (Serializable for Flink) ---
+    // --- Data Model (Serializable for Flink) --
     public static class Transaction implements Serializable {
         private static final Logger LOG = LoggerFactory.getLogger(TransactionProcessor.class);
 
@@ -53,10 +53,7 @@ public class TransactionProcessor {
         }
     }
 
-    // --- Flink Pipeline Builder ---
-
-
-    // --- NEW: Custom Continuous Transaction Source ---
+    // --- Continuous Transaction Source ---
 
     public static class ContinuousTransactionSource implements ParallelSourceFunction<Transaction> {
 
@@ -68,20 +65,18 @@ public class TransactionProcessor {
         @Override
         public void run(SourceFunction.SourceContext<Transaction> ctx) throws Exception {
             while (isRunning) {
-                // 1. Generate new transaction data
-                long txId = transactionCounter++;
-                //String accountId = accountIds[random.nextInt(accountIds.length)];
 
-                // Generates a number between 10000 and 99999
+                // Generate new transaction data
+                long txId = transactionCounter++;
+
+                // Generates a random number
                 int randomAccountNum = 10000 + random.nextInt(2000);
                 String accountId = "ACCT-" + randomAccountNum;
 
-                // Generate a random amount between 1.00 and 1000.00
+                // Generate a random amount between 1.00 and 1000.00 for base amount
                 double baseAmount = 1.0 + (1000.0 - 1.0) * random.nextDouble();
 
-               // double currentStartBalance = 1.0 + (4000.0 - 1.0) * random.nextDouble();
-
-                // 2. Introduce a chance for the amount to be negative (e.g., 20% chance)
+                // Introduce a chance for the amount to be negative (e.g., 20% chance)
                 double amount;
                 if (random.nextDouble() < 0.20) {
                     // 20% chance: make it negative (withdrawal/refund)
@@ -91,24 +86,21 @@ public class TransactionProcessor {
                     amount = baseAmount;
                 }
 
-                // Introduce a chance for the current balance to be negative (e.g., 10% chance)
-               // if (random.nextDouble() < 0.10) {
-               //     currentStartBalance = -currentStartBalance;
-               // }
-
                 long timestamp = System.currentTimeMillis();
 
                 Transaction newTransaction = new Transaction(txId, accountId, amount, timestamp, 0.00, 0.00);
 
-                // 2. Emit the transaction with a synchronized lock
+                // Emit the transaction with a synchronized lock
                 // This lock is important for correct checkpointing
                 synchronized (ctx.getCheckpointLock()) {
                     ctx.collect(newTransaction);
                 }
 
-                // 3. Wait for 1 second before generating the next transaction
-                //TimeUnit.SECONDS.sleep(1);
-                //TimeUnit.MILLISECONDS.sleep(1); // 1000 trx per sec
+                /*
+                 Wait for 1 second before generating the next transaction
+                TimeUnit.SECONDS.sleep(1);
+                TimeUnit.MILLISECONDS.sleep(1); // 1000 trx per sec
+                */
             }
         }
 
@@ -120,12 +112,13 @@ public class TransactionProcessor {
 
     public static void execute(StreamExecutionEnvironment env, String jobName) throws Exception {
 
-        // 1. Read data from the new Continuous Source
+        // Read data from the new Continuous Source
         // This is now an UNBOUNDED source, meaning the job will never finish.
         DataStream<Transaction> transactionStream = env.addSource(new ContinuousTransactionSource())
                 .name("Continuous Transaction Source");
 
-        // 2. Add the new columns (processingStatus, currentBalance, and NewBalance) using a MapFunction
+        // Add the new columns (processingStatus, currentBalance, and NewBalance) using a RichMapFunction
+        // Use RichMapFunction over Mapfunction since this uses state. MapFunction can not see the Runtime Context
         DataStream<Transaction> processedStream = transactionStream
                 .keyBy(transaction -> transaction.accountId) // Group by account
                 .map(new RichMapFunction<Transaction, Transaction>() {
@@ -143,15 +136,15 @@ public class TransactionProcessor {
 
                     @Override
                     public Transaction map(Transaction transaction) throws Exception {
-                        // 1. Get the current balance from state
+                        // Get the current balance from state
                         Double currentBalance = runningBalance.value();
                         if (currentBalance == null) { currentBalance = 0.0; }
 
-                        // 2. Update the balance with the new transaction amount
+                        // Update the balance with the new transaction amount
                         double newBalance = currentBalance + transaction.amount;
                         runningBalance.update(newBalance);
 
-                        // 3. Add logic using that state (Example: Flag if account goes negative)
+                        // Add logic using that state (Example: Status Flag if account goes negative or an expensive purchase)
                         if (newBalance < 0) {
                             transaction.processingStatus = "OVERDRAFT_WARNING";
                         } else if (transaction.amount > 700.00 && newBalance > 0) {
@@ -172,10 +165,10 @@ public class TransactionProcessor {
                 .returns(Transaction.class)
                 .name("Stateful Balance Tracker");
 
-        // 3. Output to the log
+        // Output to the log
         processedStream.print("Bank Transaction");
 
-        // 4. Execute the Flink job
+        // Execute the Flink job
         Log.info("Starting Flink Job Execution...");
         env.execute(jobName);
         Log.info("Flink Job Started and Running Continuously...");
