@@ -1,4 +1,5 @@
 
+import com.esotericsoftware.minlog.Log;
 import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -30,6 +31,7 @@ public class JobRunner {
 
         // Make parameters available globally in your operators (optional)
         env.getConfig().setGlobalJobParameters(params);
+        Log.info("Using Parameters: max.accounts = " + maxAccounts + " & checkpoint.interval = " +  checkpointInterval);
 
         // Call the dedicated pipeline builder
         TransactionProcessor.execute(env, JOB_NAME, maxAccounts);

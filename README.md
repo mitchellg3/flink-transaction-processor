@@ -34,8 +34,18 @@ The pipeline follows this structure:
 
 **Egress:** Results are streamed to the console (standard out) for real-time monitoring.
 
-## 📅 Roadmap / To-Do
-1. Configurable total transaction count 
-2. Clean up and add better comments
-3. Remove warnings and deprecated code
+## ⚙️ Configuration Parameters
 
+The application uses Flink's `ParameterTool` to allow dynamic configuration. You can pass these arguments via the command line or the "Main Arguments" section in Ververica Cloud.
+
+### 📊 Runtime Arguments
+
+| Parameter | Type | Default  | Optional | Description                                                                                                               |
+| :--- | :--- |:---------|:---------|:--------------------------------------------------------------------------------------------------------------------------|
+| `--max.accounts` | `int` | `4000`   | ✅    |  **Key Cardinality:** Controls the number of unique account IDs. Higher values increase the "width" of the Managed State. |
+| `--checkpoint.interval` | `long` | `60000` | ✅   | **Fault Tolerance:** Interval (in ms) between state snapshots. (e.g., `30000` for 30s). |
+
+---
+## 📅 Roadmap / To-Do
+1. Remove warnings and deprecated code
+2. Clean up and add better comments
