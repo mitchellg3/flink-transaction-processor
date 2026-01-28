@@ -6,8 +6,10 @@ name: Maven Package
 on:
   push:
     branches: [ "master" ]
+    tags: [ "v*" ]  # This is the line that listens for v1.0.0
   pull_request:
     branches: [ "master" ]
+    tags: [ "v*" ]  # This is the line that listens for v1.0.0
   release:
     types: [created]
 
