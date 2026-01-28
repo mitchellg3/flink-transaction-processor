@@ -132,8 +132,10 @@ public class TransactionProcessor {
 
         // Read data from the new Continuous Source
         // This is now an UNBOUNDED source, meaning the job will never finish.
-        DataStream<Transaction> transactionStream = env.addSource(new ContinuousTransactionSource(maxAccounts, bloatState))
-                .name("Continuous Transaction Source");
+        DataStream<Transaction> transactionStream = env
+                .addSource(new ContinuousTransactionSource(maxAccounts, bloatState))
+                .name("Continuous Transaction Source")
+                .uid("source-001");;
 
         // Add the new columns (processingStatus, currentBalance, and NewBalance) using a RichMapFunction
         // Use RichMapFunction over Mapfunction since this uses state. MapFunction can not see the Runtime Context
@@ -181,10 +183,24 @@ public class TransactionProcessor {
                     }
                 })
                 .returns(Transaction.class)
-                .name("Stateful Balance Tracker");
+                .name("Stateful Account Balance Tracker & Fraud Logic")
+                .uid("map-001");
 
-        // Output to the log
-        processedStream.print("Bank Transaction");
+        DataStream<Transaction> alertsOnly = processedStream
+                .filter(t -> "OVERDRAFT_WARNING".equals(t.processingStatus))
+                .name("Filter: Overdraft")
+                .uid("filter-alerts-001");
+
+        alertsOnly
+                .addSink(new WebhookSink())
+                .name("Webhook.site Alert Sink")
+                .uid("sink-webhook-001");
+
+        // Output to STDOUT
+        processedStream
+                .print("Bank Transaction")
+                .name("Stdout Console Logger")
+                .uid("sink-stdout-001");
 
         // Execute the Flink job
         Log.info("Starting Flink Job Execution...");
