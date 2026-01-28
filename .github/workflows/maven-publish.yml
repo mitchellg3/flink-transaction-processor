@@ -1,40 +1,43 @@
-# This workflow will build a package using Maven and then publish it to GitHub packages when a release is created
-# For more information see: https://github.com/actions/setup-java/blob/main/docs/advanced-usage.md#apache-maven-with-a-settings-path
-
-name: Maven Package
+name: Maven Package & Release
 
 on:
   push:
     branches: [ "master" ]
-    tags: [ "v*" ]  # This is the line that listens for v1.0.0
+    tags: [ "v*" ]
   pull_request:
     branches: [ "master" ]
-    tags: [ "v*" ]  # This is the line that listens for v1.0.0
-  release:
-    types: [created]
 
 jobs:
-  build:
-
+  build-and-publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Set up JDK 11
-      uses: actions/setup-java@v4
-      with:
-        java-version: '11'
-        distribution: 'temurin'
-        server-id: github # Value of the distributionManagement/repository/id field of the pom.xml
-        settings-path: ${{ github.workspace }} # location for the settings.xml file
+      - uses: actions/checkout@v4
 
-    - name: Build with Maven
-      run: mvn -B package -Drevision=1.0.${{ github.run_number }} --file pom.xml
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          server-id: github
+          settings-path: ${{ github.workspace }}
 
-    - name: Publish to GitHub Packages Apache Maven
-      run: mvn deploy -s $GITHUB_WORKSPACE/settings.xml -Drevision=1.0.${{ github.run_number }}
-      env:
-        GITHUB_TOKEN: ${{ github.token }}
+      - name: Build and Deploy to GitHub Packages
+        # This runs on every push to master to keep the Maven repo updated
+        run: mvn -B deploy -s $GITHUB_WORKSPACE/settings.xml -Drevision=1.0.${{ github.run_number }} -DskipTests
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release
+        # This step ONLY runs if you pushed a tag (e.g., git push origin v1.0.5)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: target/flink-transaction-processor-job-latest.jar
+          name: Release ${{ github.ref_name }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
