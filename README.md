@@ -46,10 +46,11 @@ The application uses Flink's `ParameterTool` to allow dynamic configuration. You
 
 ### 📊 Runtime Arguments
 
-| Parameter | Type | Default  | Optional | Description                                                                                                               |
-| :--- | :--- |:---------|:---------|:--------------------------------------------------------------------------------------------------------------------------|
-| `--max.accounts` | `int` | `4000`   | ✅    |  **Key Cardinality:** Controls the number of unique account IDs. Higher values increase the "width" of the Managed State. |
-| `--checkpoint.interval` | `long` | `60000` | ✅   | **Fault Tolerance:** Interval (in ms) between state snapshots. (e.g., `30000` for 30s). |
+| Parameter | Type      | Default | Optional | Description                                                                                                              |
+| :--- |:----------|:--------|:---------|:-------------------------------------------------------------------------------------------------------------------------|
+| `--max.accounts` | `int`     | `4000`  | ✅    | **Key Cardinality:** Controls the number of unique account IDs. Higher values increase the "width" of the Managed State. |
+| `--checkpoint.interval` | `long`    | `60000` | ✅   | **Fault Tolerance:** Interval (in ms) between state snapshots. (e.g., `30000` for 30s).                                  |
+| `--state.bloat` | `boolean` | `false` | ✅    | **Increase State Size:** Every Transaction object stored in Flink's ValueState is padded with a 2KB string of junk data                                                                                                |
 
 ---
 ## 📅 Roadmap / To-Do
