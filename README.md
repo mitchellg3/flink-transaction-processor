@@ -2,7 +2,7 @@
 
 A stateful Apache Flink application that processes real-time bank transactions, 
 tracks account balances, and flags overdrafts. This is meant to be self-contained (No Kafka or DB for
-sources and sinks). 
+sources and sinks). **This is built on Flink 1.20**
 
 ## 🚀 Features
 * **Stateful Balance Tracking:** Uses Flink's `ValueState` Utilizes Flink's ValueState to maintain a distributed "source of truth" for account balances, ensuring sub-millisecond lookups.
@@ -11,7 +11,13 @@ sources and sinks).
 * **Checkpointing:** Fault-tolerant state that survives job restarts.
 * **Exactly-Once Guarantees:** Configured with Checkpointing to ensure that even if the cluster crashes, account balances remain accurate and no data is double-counted. Currently every 1 min, but if this was real you should checkpoint more often.
 * **Self-Contained Testing:** Includes a built-in SourceFunction that generates mock banking traffic, making it 100% runnable out of the box.
-* 
+
+## 📦 Quick Start: Run the JAR
+
+If you want to skip the build process and run the application directly on Flink or Ververica Cloud, you can download the pre-compiled shaded JAR from the Releases page.
+
+1. **Download the latest JAR:** Go to [Releases](https://github.com/mitchellg3/flink-transaction-processor/releases) and download the file named `flink-transaction-processor-latest.jar`.
+
 ## 🛠️ Setup & Running
 1. **Prerequisites:** Java 11+, Maven, and an IDE (IntelliJ recommended).
 
